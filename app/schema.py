@@ -3,167 +3,241 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
-class SkillExtraction(BaseModel):
-    # The LLM cannot know your database's numeric skillId.
-    # The backend must map this extracted string to the correct DB skillId.
-    skillName: str = Field(
-        description="The exact name of the technical skill, tool, or framework (e.g., 'AWS Deployment', 'Spring Boot')."
-    )
-    skillLevel: Literal["Beginner", "Intermediate", "Advanced"] = Field(
-        description="Estimate the proficiency level based on years of experience or context. Default to 'Intermediate' if unsure."
-    )
-
-
-class JobRecord(BaseModel):
-    companyName: str = Field(description="The name of the company or employer.")
-    bulletPoints: List[str] = Field(
-        description="Extract EVERY SINGLE bullet point and sentence under this job exactly as written. Do not summarize. Create a new string in this array for each bullet point.",
-        default_factory=list,
-    )
-
-
-class ProfessionalDetails(BaseModel):
-    professionalSummary: List[str] = Field(
-        description="""Extract EVERY SINGLE sentence from the candidate's professional summary, profile, or objective statement exactly as written. Create a new string in this array for each sentence. Do not summarize, truncate, or skip words.""",
-        default_factory=list,
-    )
-    workExperienceDetails: List[JobRecord] = Field(
-        description="An array containing a record for EVERY job listed in the Experience/Employment history section. Do not skip any jobs.",
-        default_factory=list,
-    )
-    projectDetails: List[str] = Field(
-        description="""Extract EVERY SINGLE sentence or bullet point from a STANDALONE 'Projects' section exactly as written. Create a new string in this array for each sentence.
-        CRITICAL: If a project or client is listed underneath an employer in the Work Experience section, DO NOT put it here. Leave it in the workExperienceDetails.""",
-        default_factory=list,
-    )
-    educationAndCertifications: List[str] = Field(
-        description="""Extract EVERY SINGLE sentence or bullet point regarding the candidate's degrees, universities, and certifications exactly as written. Create a new string in this array for each item. Do not summarize.""",
-        default_factory=list,
-    )
-
-
-class CandidateExtraction(BaseModel):
+class EntityDetails(BaseModel):
     """
-    Schema for extracting candidate information to perfectly match the HRMS frontend CandidateFormValues interface.
+    Reusable schema for Supplier, Buyer (Bill To), and Consignee (Ship To) details.
     """
-
-    # PHASE 1: Personal Identity & Contact
-    firstName: str = Field(description="Candidate's first name. Convert to title case")
-    middleName: Optional[str] = Field(
-        description="Candidate's middle name, if available. Convert to title case",
+    entityName: str = Field(
+        description="The exact legal name of the business or individual. Convert to Title Case."
+    )
+    addressLines: List[str] = Field(
+        description="Extract EVERY SINGLE line of the address exactly as written. Create a new string in this array for each line or comma-separated segment. Do not skip pincodes or landmarks.",
+        default_factory=list,
+    )
+    gstin: Optional[str] = Field(
+        description="The 15-character GST Identification Number (GSTIN). Return null if not present.",
         default=None,
     )
-    lastName: str = Field(
-        description="Candidate's last name. It must be a single word. Do not include the middle name or initial here. Convert to title case."
-    )
-    gender: Optional[Literal["Male", "Female", "Other"]] = Field(
-        description="Infer gender from name or pronouns if possible",
+    pan: Optional[str] = Field(
+        description="The 10-character Permanent Account Number (PAN). Often embedded inside the GSTIN or listed separately. Return null if not present.",
         default=None,
+    )
+    stateName: Optional[str] = Field(
+        description="The name of the state (e.g., 'Karnataka', 'Delhi'). Convert to Title Case.",
+        default=None,
+    )
+    stateCode: Optional[str] = Field(
+        description="The 2-digit numerical GST state code (e.g., '29', '06').",
+        default=None,
+    )
+    contactPerson: Optional[str] = Field(
+        description="The name of the specific contact person mentioned under this entity, if any.",
+        default=None,
+    )
+    contactNumber: List[str] = Field(
+        description="Phone or mobile number(s). If multiple numbers are present, include each in a separate string in this list.",
+        default_factory=list,
     )
     emailId: Optional[str] = Field(
-        description="Candidate's email address", default=None
-    )
-    contactNumber: Optional[str] = Field(
-        description="Primary phone number (10-15 digits, include the country code if present. If not present use '+91' as the default country code)",
-        default=None,
-    )
-    alternateNumber: Optional[str] = Field(
-        description="Secondary phone number (10-15 digits), if available", default=None
-    )
-    dateOfBirth: Optional[str] = Field(
-        description="Date of birth explicitly formatted exactly as YYYY-MM-DD for JavaScript Date compatibility.",
+        description="Email address of the entity or contact person.",
         default=None,
     )
 
-    # Location Details
-    presentAddress: Optional[str] = Field(
-        description="The complete present street address", default=None
-    )
-    currentLocation: Optional[str] = Field(
-        description="Current city name (e.g., 'Bangalore', 'Chennai')", default=None
-    )
-    preferredLocation: Optional[str] = Field(
-        description="Preferred relocation city, if mentioned", default=None
-    )
-    willingToRelocate: Optional[bool] = Field(
-        description="True if the candidate explicitly mentions willingness to relocate",
-        default=None,
-    )
-    pincode: Optional[str] = Field(
-        description="6-digit postal code/pincode if present", default=None
-    )
 
-    # System IDs (LLM will default these to None, backend/frontend must handle them)
-    jdId: Optional[str] = Field(
-        description="Job Description ID. Always return null.", default=None
-    )
-    sourceId: Optional[str] = Field(
-        description="Source ID. Always return null.", default=None
-    )
-
-    # PHASE 2: Professional Background
-    presentCompany: Optional[str] = Field(
-        description="Current or most recent company name from the professional experience or employment history sections",
+class LineItem(BaseModel):
+    """
+    Represents a single row in the invoice's product or service table.
+    """
+    serialNumber: Optional[str] = Field(
+        description="The sequence or serial number of the item in the table (e.g., '1', '2', 'A').",
         default=None,
     )
-    jobRole: Optional[str] = Field(
-        description="Current or most recent Job Title / Role", default=None
-    )
-    educationQualification: Optional[str] = Field(
-        description="Standardized highest degree (e.g., 'B-TECH', 'M-TECH', 'BCA', 'MCA', 'B.Sc')",
-        default=None,
-    )
-
-    # Combined Experience Fields (Frontend expects strings)
-    experienceYears: Optional[str] = Field(
-        description="Total professional experience represented as a string (e.g., '5.5' for 5 and a half years)",
-        default=None,
-    )
-    relevantExperience: Optional[str] = Field(
-        description="Experience relevant to core technical skills as a string (e.g., '3.0')",
-        default=None,
-    )
-
-    # Compensation & Availability
-    noticePeriodDays: Optional[str] = Field(
-        description="Notice period in days as a string (e.g., '30', '60').",
-        default=None,
-    )
-    fixedSalaryLpa: Optional[str] = Field(
-        description="Current Fixed Salary in LPA (Lakhs Per Annum) as a string up to 3 decimal places (e.g., '12.500').",
-        default=None,
-    )
-    isVariableSalary: Optional[bool] = Field(
-        description="Set to true if a variable salary or bonus component is mentioned.",
-        default=False,
-    )
-    variableSalaryLpa: Optional[str] = Field(
-        description="Variable Salary in LPA as a string, if mentioned.",
-        default=None,
-    )
-    expectedCtc: Optional[str] = Field(
-        description="Expected CTC in LPA as a string up to 3 decimal places.",
-        default=None,
-    )
-
-    employmentType: Optional[str] = Field(
-        description="Type of employment (e.g., 'Full-Time', 'Contract')", default=None
-    )
-    referredById: Optional[str] = Field(
-        description="Referrer ID. Always return null.", default=None
-    )
-    isReferred: Optional[bool] = Field(
-        description="Always return false.", default=False
-    )
-
-    # Technical Expertise
-    skills: List[SkillExtraction] = Field(
-        description="List of extracted technical skills mapped to a competency level.",
+    description: List[str] = Field(
+        description="Extract EVERY SINGLE line of text describing this specific product or service exactly as written. If there are hardware serial numbers, part numbers, or multi-line descriptions, create a new string in this array for each line. Do not summarize.",
         default_factory=list,
     )
-
-    # Professional detail data for candidate ranking engine
-    professionalDetails: Optional[ProfessionalDetails] = Field(
-        description="Structured extraction of the candidate's unstructured professional text.",
+    hsnSacCode: Optional[str] = Field(
+        description="The HSN (Harmonized System of Nomenclature) or SAC (Services Accounting Code) assigned to this item. Usually a 4 to 8 digit number.",
         default=None,
+    )
+    quantity: Optional[str] = Field(
+        description="The number of units sold, represented as a string (e.g., '50', '2.5').",
+        default=None,
+    )
+    uom: Optional[str] = Field(
+        description="Unit of Measurement (e.g., 'Nos', 'PCS', 'Kgs', 'Liters').",
+        default=None,
+    )
+    unitRate: Optional[str] = Field(
+        description="The price per unit before taxes and discounts, as a string up to 2 decimal places (e.g., '650.00').",
+        default=None,
+    )
+    discountAmount: Optional[str] = Field(
+        description="The monetary value or percentage of discount applied to this specific line item, if explicitly stated.",
+        default=None,
+    )
+    gstRatePercentage: Optional[str] = Field(
+        description="The combined GST percentage rate applied to this item (e.g., '18%', '9%').",
+        default=None,
+    )
+    itemTotalAmount: Optional[str] = Field(
+        description="The final calculated amount for this row, represented as a string.",
+        default=None,
+    )
+
+
+class TaxSummary(BaseModel):
+    """
+    The aggregate financial breakdown usually found at the bottom of the invoice.
+    """
+    totalTaxableValue: str = Field(
+        description="The total baseline amount upon which GST is calculated. Represented as a string."
+    )
+    totalCgstAmount: Optional[str] = Field(
+        description="The aggregate Central GST amount charged on the invoice as a string. Return null if not applicable.",
+        default=None,
+    )
+    cgstPercentage: Optional[str] = Field(
+        description="The percentage of the total taxable value that is charged as Central GST. Return null if not applicable.",
+        default=None,
+    )
+    totalSgstAmount: Optional[str] = Field(
+        description="The aggregate State (or UT) GST amount charged on the invoice as a string. Return null if not applicable.",
+        default=None,
+    )
+    sgstPercentage: Optional[str] = Field(
+        description="The percentage of the total taxable value that is charged as State (or UT) GST. Return null if not applicable.",
+        default=None,
+    )
+    totalIgstAmount: Optional[str] = Field(
+        description="The aggregate Integrated GST amount charged on the invoice as a string. Return null if not applicable.",
+        default=None,
+    )
+    igstPercentage: Optional[str] = Field(
+        description="The percentage of the total taxable value that is charged as Integrated GST. Return null if not applicable.",
+        default=None,
+    )
+    roundingOff: Optional[str] = Field(
+        description="Any fractional adjustment made to round the grand total (e.g., '0.50', '-0.16').",
+        default=None,
+    )
+    invoiceTotalAmount: str = Field(
+        description="The final Grand Total payable amount, including all taxes and charges, represented as a string."
+    )
+    amountInWords: Optional[str] = Field(
+        description="The exact text where the grand total or tax amount is written out alphabetically.",
+        default=None,
+    )
+
+
+class BankDetails(BaseModel):
+    """
+    Supplier's banking information for payment processing.
+    """
+    bankName: Optional[str] = Field(
+        description="The name of the banking institution (e.g., 'ICICI Bank', 'Axis Bank').",
+        default=None,
+    )
+    accountNumber: Optional[str] = Field(
+        description="The bank account number for remittance.",
+        default=None,
+    )
+    ifscCode: Optional[str] = Field(
+        description="The 11-character Indian Financial System Code (IFSC) for the bank branch.",
+        default=None,
+    )
+    branchName: Optional[str] = Field(
+        description="The name or location of the bank branch.",
+        default=None,
+    )
+
+
+class InvoiceExtraction(BaseModel):
+    """
+    Schema for completely extracting and structuring an Indian B2B/B2C Tax Invoice.
+    """
+
+    # PHASE 1: Document Metadata
+    documentType: Literal["Tax Invoice", "Bill of Supply", "Proforma Invoice", "Unknown"] = Field(
+        description="Identify the nature of the document. Default to 'Unknown' if unclear."
+    )
+    invoiceNumber: str = Field(
+        description="The unique document identifier/invoice number. Usually under 'Invoice Number' or 'Invoice No.'."
+    )
+    invoiceDate: Optional[str] = Field(
+        description="The date the invoice was generated, explicitly formatted exactly as YYYY-MM-DD. Usually under 'Invoice Date' or 'Dated'.",
+        default=None,
+    )
+    irn: Optional[str] = Field(
+        description="The 64-character Invoice Reference Number (IRN) generated for E-Invoices.",
+        default=None,
+    )
+    acknowledgementNumber: Optional[str] = Field(
+        description="The e-Invoice Ack No., if present.",
+        default=None,
+    )
+
+    # PHASE 2: Identity Context
+    supplierDetails: EntityDetails = Field(
+        description="The entity issuing the invoice and selling the goods/services."
+    )
+    buyerDetails: EntityDetails = Field(
+        description="The entity billed for the goods/services (Bill To)."
+    )
+    consigneeDetails: Optional[EntityDetails] = Field(
+        description="The entity receiving the goods (Ship To). Often the same as the buyer. Return null if a separate 'Ship To' is not explicitly mentioned.",
+        default=None,
+    )
+
+    # PHASE 3: Order & Shipping Logistics
+    poNumber: Optional[str] = Field(
+        description="The Buyer's Purchase Order (PO) number or reference number.",
+        default=None,
+    )
+    paymentTerms: Optional[str] = Field(
+        description="The agreed terms of payment (e.g., '30 Days Credit', 'COD - 15 days PDC').",
+        default=None,
+    )
+    paymentDueDate: Optional[str] = Field(
+        description="The specific deadline for payment, formatted as YYYY-MM-DD if available.",
+        default=None,
+    )
+    eWayBillNumber: Optional[str] = Field(
+        description="The e-Way Bill number used for the transport of goods.",
+        default=None,
+    )
+    dispatchedThrough: Optional[str] = Field(
+        description="The courier, transport agency, or delivery mode (e.g., 'BLUE DART', 'Road').",
+        default=None,
+    )
+    docketOrLrNumber: Optional[str] = Field(
+        description="The Lorry Receipt (LR) number, Railway Receipt (RR) number, or courier tracking/docket number.",
+        default=None,
+    )
+
+    # PHASE 4: Transaction Details
+    lineItems: List[LineItem] = Field(
+        description="An array containing a record for EVERY row in the products/services table. Do not skip any items.",
+        default_factory=list,
+    )
+    freightCharges: Optional[str] = Field(
+        description="Any shipping, delivery, or freight charges added to the bill as a string.",
+        default=None,
+    )
+
+    # PHASE 5: Financials & Footer
+    taxSummary: TaxSummary = Field(
+        description="The final aggregated financial calculations for the invoice."
+    )
+    bankDetails: Optional[BankDetails] = Field(
+        description="The supplier's banking information.",
+        default=None,
+    )
+    termsAndConditions: List[str] = Field(
+        description="Extract EVERY SINGLE bullet point or sentence under 'Terms & Conditions', 'Declaration', or 'Disclaimer' exactly as written. Create a new string in this array for each condition.",
+        default_factory=list,
+    )
+    reverseChargeApplicable: Literal["Yes", "No", "NA"] = Field(
+        description="Determine if reverse charge mechanism is applicable based on text or checkboxes. Default to 'NA' if not mentioned.",
+        default="NA",
     )

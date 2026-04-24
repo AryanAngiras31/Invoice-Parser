@@ -9,7 +9,6 @@ import instructor
 import pymupdf4llm
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from google import genai
 
 # Marker OCR imports
 from marker.converters.pdf import PdfConverter
@@ -17,7 +16,7 @@ from marker.models import create_model_dict
 from marker.output import text_from_rendered
 from openai import AsyncOpenAI
 
-from app.schema import CandidateExtraction
+from app.schema import InvoiceExtraction
 
 client = instructor.from_openai(
     AsyncOpenAI(
@@ -48,7 +47,7 @@ async def lifespan(app: FastAPI):
     converter_instance = None
 
 
-app = FastAPI(title="Resume Auto-Populate API", lifespan=lifespan)
+app = FastAPI(title="Tax Invoice Parser API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,25 +58,25 @@ app.add_middleware(
 )
 
 
-@app.post("/api/v1/extract-resume")
-async def extract_resume(file: UploadFile = File(...)):
-    allowed_extensions = (".pdf", ".png", ".jpg", ".jpeg")
+@app.post("/api/v1/extract-invoice")
+async def extract_invoice(file: UploadFile = File(...)):
+    allowed_extensions = (".pdf")
     filename = file.filename.lower()
 
     if not filename.endswith(allowed_extensions):
         raise HTTPException(
-            status_code=400, detail="Only PDF, PNG, and JPG files are supported."
+            status_code=400, detail="Only PDFs are supported."
         )
 
-    # 2MB File Size Limit
-    MAX_FILE_SIZE = 2 * 1024 * 1024  # 2 MB
+    # 5MB File Size Limit
+    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
     file.file.seek(0, 2)  # Move cursor to end of file
     file_size = file.file.tell()  # Get current position (size)
     file.file.seek(0)  # Reset cursor back to the beginning
 
     if file_size > MAX_FILE_SIZE:
         raise HTTPException(
-            status_code=413, detail="File too large. Maximum size is 2MB."
+            status_code=413, detail="File too large. Maximum size is 5MB."
         )
 
     start_time = time.time()
@@ -100,8 +99,8 @@ async def extract_resume(file: UploadFile = File(...)):
                 total_pages = doc.page_count
                 doc.close()
 
-                # Read a maximum of 3 pages
-                pages_to_extract = list(range(min(total_pages, 3)))
+                # Read a maximum of 15 pages
+                pages_to_extract = list(range(min(total_pages, 15)))
 
                 # 3. Offload PDF parsing to a background thread
                 full_text = await asyncio.to_thread(
@@ -133,60 +132,69 @@ async def extract_resume(file: UploadFile = File(...)):
             )
 
         system_prompt = """
-        You are an expert ATS data extraction system tailored for the Indian IT job market.
-        Extract the requested fields from the resume markdown.
-        Pay special attention to calculating total experience accurately into Years and Months.
-        Current/Expected CTC should be extracted as floats representing Lakhs Per Annum (LPA).
-        Standardize the highest education qualification to common acronyms (e.g., B-TECH, M-TECH, MCA).
-        If any of the requested fields are not explicitly stated in the resume, return null for those fields rather than guessing them.
+        You are an expert financial data extraction system tailored for Indian GST Tax Invoices.
+        Extract the requested fields from the provided invoice markdown.
+        CRITICAL INSTRUCTIONS:
+        1. DO NOT perform any calculations. Extract numbers exactly as they appear on the document.
+        2. Maintain table row integrity. Do not merge separate line items.
+        3. If an entity has multiple addresses, extract the one explicitly labeled 'Billing' or 'Registered'.
+        4. If a field is not explicitly present, return null. Do not guess or infer HSN codes, GSTINs, or tax rates.
         """
 
         candidate_data = await client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            response_model=CandidateExtraction,
+            response_model=InvoiceExtraction,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Resume Markdown:\n\n{full_text}"},
+                {"role": "user", "content": f"Invoice Markdown:\n\n{full_text}"},
             ],
             temperature=0.0,
         )
         candidate_data_dict = candidate_data.model_dump()
 
-        # Flatten ProfessionalDetails list fields into single strings
-        prof = candidate_data_dict.get("professionalDetails")
-        if prof:
-            prof["professionalSummary"] = " ".join(prof.get("professionalSummary", []))
-            prof["projectDetails"] = " ".join(prof.get("projectDetails", []))
-            prof["educationAndCertifications"] = " ".join(prof.get("educationAndCertifications", []))
-    
-        # Join bulletPoints within each JobRecord
-        for job in prof.get("workExperienceDetails", []):
-            job["bulletPoints"] = " ".join(job.get("bulletPoints", []))
+        # Post processing logic
 
-        # Return the first mandatory field not filled so that the frontend can hightlight it
+        # Join multi-line text with newlines to preserve formatting
+        for item in candidate_data_dict.get("lineItems", []):
+            if item.get("description"):
+                item["description"] = "\n".join(item["description"])
+
+        address_entities = ["supplierDetails", "buyerDetails", "consigneeDetails"]
+        for entity in address_entities:
+            details = candidate_data_dict.get(entity)
+            if details and details.get("addressLines"):
+                details["addressLines"] = "\n".join(details["addressLines"])
+
+        # 2. Update mandatory fields for Indian Invoices
         mandatory_fields = [
-            "firstName",
-            "lastName",
-            "gender",
-            "dateOfBirth",
-            "emailId",
-            "contactNumber",
-            "currentLocation",
-            "pincode",
-            "presentAddress",
-            "presentCompany",
-            "jobRole",
-            "experienceYears",
-            "relevantExperience",
-            "educationQualification",
-            "noticePeriodDays",
-            "fixedSalaryLpa",
-            "expectedCtc",
+            "invoiceNumber",
+            "invoiceDate",
+            "invoiceTotalAmount"
         ]
 
-        missing_fields = [
-            field for field in mandatory_fields if not candidate_data_dict[field]
-        ]
+        missing_fields = []
+        # Check top level fields
+        for field in mandatory_fields:
+            if not candidate_data_dict.get(field):
+                missing_fields.append(field)
+
+        # Check nested supplier GSTIN
+        if not candidate_data_dict.get("supplierDetails", {}).get("gstin"):
+            missing_fields.append("supplierDetails.gstin")
+
+        # Financial Validation
+        tax_summary = candidate_data_dict.get("taxSummary", {})
+        if not tax_summary.get("totalTaxableValue"):
+            missing_fields.append("taxSummary.totalTaxableValue")
+
+        # Check if at least one tax type was charged (or if it's an IGST vs CGST/SGST split)
+        has_tax = (
+            tax_summary.get("totalCgstAmount") or
+            tax_summary.get("totalSgstAmount") or
+            tax_summary.get("totalIgstAmount")
+        )
+        if not has_tax:
+            missing_fields.append("taxSummary.MissingTaxBreakdown")
 
         processing_time = round((time.time() - start_time) * 1000)
 
