@@ -1,7 +1,5 @@
 from typing import List, Literal, Optional
-
 from pydantic import BaseModel, Field
-
 
 class EntityDetails(BaseModel):
     """
@@ -43,7 +41,6 @@ class EntityDetails(BaseModel):
         default=None,
     )
 
-
 class LineItem(BaseModel):
     """
     Represents a single row in the invoice's product or service table.
@@ -65,7 +62,7 @@ class LineItem(BaseModel):
         default=None,
     )
     quantity: Optional[str] = Field(
-        description="The number of units sold, represented as a string (e.g., '50', '2.5').",
+        description="The number of units sold. Extract ONLY the numeric value. Do NOT include text labels (like 'Nos' or 'PCS') in this field.",
         default=None,
     )
     uom: Optional[str] = Field(
@@ -73,7 +70,7 @@ class LineItem(BaseModel):
         default=None,
     )
     unitRate: Optional[str] = Field(
-        description="The price per unit before taxes and discounts, as a string up to 2 decimal places (e.g., '650.00').",
+        description="The price per unit before taxes and discounts. Extract ONLY the numeric value up to 2 decimal places. Do NOT include currency symbols (like ₹ or Rs).",
         default=None,
     )
     discountAmount: Optional[str] = Field(
@@ -85,17 +82,16 @@ class LineItem(BaseModel):
         default=None,
     )
     itemTotalAmount: Optional[str] = Field(
-        description="The final calculated amount for this row, represented as a string.",
+        description="The final calculated amount for this row. Extract ONLY the numeric value. Do NOT include currency symbols.",
         default=None,
     )
-
 
 class TaxSummary(BaseModel):
     """
     The aggregate financial breakdown usually found at the bottom of the invoice.
     """
     totalTaxableValue: str = Field(
-        description="The total baseline amount upon which GST is calculated. Represented as a string."
+        description="The total baseline amount upon which GST is calculated. Represented as a string. Extract ONLY the numeric value."
     )
     totalCgstAmount: Optional[str] = Field(
         description="The aggregate Central GST amount charged on the invoice as a string. Return null if not applicable.",
@@ -126,13 +122,12 @@ class TaxSummary(BaseModel):
         default=None,
     )
     invoiceTotalAmount: str = Field(
-        description="The final Grand Total payable amount, including all taxes and charges, represented as a string."
+        description="The final Grand Total payable amount, including all taxes and charges. Extract ONLY the numeric value without currency symbols."
     )
     amountInWords: Optional[str] = Field(
         description="The exact text where the grand total or tax amount is written out alphabetically.",
         default=None,
     )
-
 
 class BankDetails(BaseModel):
     """
@@ -155,12 +150,10 @@ class BankDetails(BaseModel):
         default=None,
     )
 
-
 class InvoiceExtraction(BaseModel):
     """
     Schema for completely extracting and structuring an Indian B2B/B2C Tax Invoice.
     """
-
     # PHASE 1: Document Metadata
     documentType: Literal["Tax Invoice", "Bill of Supply", "Proforma Invoice", "Unknown"] = Field(
         description="Identify the nature of the document. Default to 'Unknown' if unclear."
@@ -169,7 +162,7 @@ class InvoiceExtraction(BaseModel):
         description="The unique document identifier/invoice number. Usually under 'Invoice Number' or 'Invoice No.'."
     )
     invoiceDate: Optional[str] = Field(
-        description="The date the invoice was generated, explicitly formatted exactly as YYYY-MM-DD. Usually under 'Invoice Date' or 'Dated'.",
+        description="The date the invoice was generated, explicitly formatted exactly as YYYY-MM-DD. Pay extreme attention to the year printed on the document. Do not assume the current year.",
         default=None,
     )
     irn: Optional[str] = Field(
@@ -225,7 +218,7 @@ class InvoiceExtraction(BaseModel):
         default_factory=list,
     )
     freightCharges: Optional[str] = Field(
-        description="Any shipping, delivery, or freight charges added to the bill as a string.",
+        description="Any shipping, delivery, or freight charges added to the bill as a string. Extract ONLY the numeric value.",
         default=None,
     )
 
