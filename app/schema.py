@@ -41,6 +41,47 @@ class EntityDetails(BaseModel):
         default=None,
     )
 
+class DeliveryDetails(BaseModel):
+    """
+    Logistics, shipping, and delivery information.
+    """
+    deliveryNote: Optional[str] = Field(
+        description="The Delivery Note identifier. Return null if not present.",
+        default=None,
+    )
+    deliveryNoteDate: Optional[str] = Field(
+        description="The date of the delivery note, formatted as YYYY-MM-DD if possible. Return null if not present.",
+        default=None,
+    )
+    eWayBillNumber: Optional[str] = Field(
+        description="The e-Way Bill number used for the transport of goods. Return null if not present.",
+        default=None,
+    )
+    dispatchedThrough: Optional[str] = Field(
+        description="The courier, transport agency, or delivery mode (e.g., 'BLUE DART', 'Road'). Return null if not present.",
+        default=None,
+    )
+    dispatchDocumentNumber: Optional[str] = Field(
+        description="The Dispatch Document No., Lorry Receipt (LR) number, Railway Receipt (RR) number, or Docket number. Return null if not present.",
+        default=None,
+    )
+    destination: Optional[str] = Field(
+        description="The final destination city or location for the delivery (e.g., 'GURGAON', 'Bengaluru'). Return null if not present.",
+        default=None,
+    )
+    motorVehicleNumber: Optional[str] = Field(
+        description="The vehicle registration or license plate number (e.g., 'KA51AG8938'). Return null if not present.",
+        default=None,
+    )
+    termsOfDelivery: Optional[str] = Field(
+        description="Specific terms and conditions relating to the physical delivery of goods. Return null if not present.",
+        default=None,
+    )
+    receiverName: Optional[str] = Field(
+        description="Name of the specific person or entity receiving the shipment/courier, often listed under courier details. Return null if not present.",
+        default=None,
+    )
+
 class LineItem(BaseModel):
     """
     Represents a single row in the invoice's product or service table.
@@ -50,7 +91,11 @@ class LineItem(BaseModel):
         default=None,
     )
     description: List[str] = Field(
-        description="Extract EVERY SINGLE line of text describing this specific product or service exactly as written. If there are hardware serial numbers, part numbers, or multi-line descriptions, create a new string in this array for each line. Do not summarize. If a letter is in uppercase, keep it uppercase. If a letter is in lowercase, keep it lowercase.",
+        description="Extract EVERY SINGLE line of text describing this specific product or service exactly as written. Do not summarize. If a letter is in uppercase, keep it uppercase. If a letter is in lowercase, keep it lowercase.",
+        default_factory=list,
+    )
+    hardwareSerialNumbers: List[str] = Field(
+        description="Extract EVERY SINGLE hardware serial number (S/n) associated with this line item. If multiple numbers are grouped with slashes (e.g., '123/45/67'), extract the whole string or split them. Extract all alphanumeric serial codes even if the 'S/n' prefix is omitted.",
         default_factory=list,
     )
     modelNumber: Optional[str] = Field(
@@ -199,20 +244,14 @@ class InvoiceExtraction(BaseModel):
         description="The specific deadline for payment, formatted as YYYY-MM-DD if available.",
         default=None,
     )
-    eWayBillNumber: Optional[str] = Field(
-        description="The e-Way Bill number used for the transport of goods.",
-        default=None,
-    )
-    dispatchedThrough: Optional[str] = Field(
-        description="The courier, transport agency, or delivery mode (e.g., 'BLUE DART', 'Road').",
-        default=None,
-    )
-    docketOrLrNumber: Optional[str] = Field(
-        description="The Lorry Receipt (LR) number, Railway Receipt (RR) number, or courier tracking/docket number.",
+
+    # PHASE 4: Transaction Details
+    deliveryDetails: Optional[DeliveryDetails] = Field(
+        description="Details regarding the physical dispatch, transport, and delivery of the goods. Return null if no shipping or dispatch information is present.",
         default=None,
     )
 
-    # PHASE 4: Transaction Details
+    # PHASE 5: Transaction Details
     lineItems: List[LineItem] = Field(
         description="An array containing a record for EVERY row in the products/services table. Do not skip any items.",
         default_factory=list,
@@ -222,7 +261,7 @@ class InvoiceExtraction(BaseModel):
         default=None,
     )
 
-    # PHASE 5: Financials & Footer
+    # PHASE 6: Financials & Footer
     taxSummary: TaxSummary = Field(
         description="The final aggregated financial calculations for the invoice."
     )

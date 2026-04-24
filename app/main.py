@@ -101,18 +101,7 @@ async def extract_invoice(file: UploadFile = File(...)):
             response_model=InvoiceExtraction,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Extract the data from this invoice:"},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
-                }
+                {"role": "user", "content": user_content}
             ],
             temperature=0.0,
         )
