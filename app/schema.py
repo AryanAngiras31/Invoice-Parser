@@ -34,9 +34,9 @@ class EntityDetails(BaseModel):
         description="The name of the specific contact person mentioned under this entity, if any.",
         default=None,
     )
-    contactNumber: List[str] = Field(
+    contactNumber: Optional[List[str]] = Field(
         description="Phone or mobile number(s). If multiple numbers are present, include each in a separate string in this list.",
-        default_factory=list,
+        default=None,
     )
     emailId: Optional[str] = Field(
         description="Email address of the entity or contact person.",
@@ -53,8 +53,12 @@ class LineItem(BaseModel):
         default=None,
     )
     description: List[str] = Field(
-        description="Extract EVERY SINGLE line of text describing this specific product or service exactly as written. If there are hardware serial numbers, part numbers, or multi-line descriptions, create a new string in this array for each line. Do not summarize.",
+        description="Extract EVERY SINGLE line of text describing this specific product or service exactly as written. If there are hardware serial numbers, part numbers, or multi-line descriptions, create a new string in this array for each line. Do not summarize. If a letter is in uppercase, keep it uppercase. If a letter is in lowercase, keep it lowercase.",
         default_factory=list,
+    )
+    modelNumber: Optional[str] = Field(
+        description="The model number or part number of the product or service. If a letter is in uppercase, keep it uppercase. If a letter is in lowercase, keep it lowercase. Return null if not present",
+        default=None,
     )
     hsnSacCode: Optional[str] = Field(
         description="The HSN (Harmonized System of Nomenclature) or SAC (Services Accounting Code) assigned to this item. Usually a 4 to 8 digit number.",
@@ -169,7 +173,7 @@ class InvoiceExtraction(BaseModel):
         default=None,
     )
     irn: Optional[str] = Field(
-        description="The 64-character Invoice Reference Number (IRN) generated for E-Invoices.",
+        description="The 64-character Invoice Reference Number (IRN) generated for E-Invoices. It may be split into multiple lines by a '-' return the full concatenated string.",
         default=None,
     )
     acknowledgementNumber: Optional[str] = Field(
@@ -191,7 +195,7 @@ class InvoiceExtraction(BaseModel):
 
     # PHASE 3: Order & Shipping Logistics
     poNumber: Optional[str] = Field(
-        description="The Buyer's Purchase Order (PO) number or reference number.",
+        description="The Buyer's Purchase Order (PO) number, reference number or sale order number.",
         default=None,
     )
     paymentTerms: Optional[str] = Field(
