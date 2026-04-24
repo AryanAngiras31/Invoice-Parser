@@ -168,8 +168,7 @@ async def extract_invoice(file: UploadFile = File(...)):
         # 2. Update mandatory fields for Indian Invoices
         mandatory_fields = [
             "invoiceNumber",
-            "invoiceDate",
-            "invoiceTotalAmount"
+            "invoiceDate"
         ]
 
         missing_fields = []
@@ -195,6 +194,10 @@ async def extract_invoice(file: UploadFile = File(...)):
         )
         if not has_tax:
             missing_fields.append("taxSummary.MissingTaxBreakdown")
+
+        # Check if invoice total amount is present
+        if not candidate_data_dict.get("taxSummary", {}).get("invoiceTotalAmount"):
+            missing_fields.append("taxSummary.invoiceTotalAmount")
 
         processing_time = round((time.time() - start_time) * 1000)
 
