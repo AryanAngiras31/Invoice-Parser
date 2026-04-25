@@ -9,7 +9,7 @@ class EntityDetails(BaseModel):
         description="The exact legal name of the business or individual. Convert to Title Case."
     )
     addressLines: List[str] = Field(
-        description="Extract EVERY SINGLE line of the address exactly as written. Create a new string in this array for each line or comma-separated segment. Do not skip pincodes or landmarks.",
+        description="Extract EVERY SINGLE line of the address exactly as written. Create a new string in this array for each line or comma-separated segment. Do not skip pincodes or landmarks. Do not include the Phone number (Ph.No.), GSTIN, State Name, Contact or Email here. ",
         default_factory=list,
     )
     gstin: Optional[str] = Field(
@@ -33,7 +33,7 @@ class EntityDetails(BaseModel):
         default=None,
     )
     contactNumber: Optional[List[str]] = Field(
-        description="Phone or mobile number(s). If multiple numbers are present, include each in a separate string in this list.",
+        description="Phone or mobile number(s). If multiple numbers are present, include each in a separate string in this list. The field is usually listed as 'Contact Number', 'Contact' or 'Ph.No.'.",
         default=None,
     )
     emailId: Optional[str] = Field(
@@ -91,11 +91,11 @@ class LineItem(BaseModel):
         default=None,
     )
     description: List[str] = Field(
-        description="Extract EVERY SINGLE line of text describing this specific product or service exactly as written. Do not summarize. If a letter is in uppercase, keep it uppercase. If a letter is in lowercase, keep it lowercase.",
+        description="Extract the first line of text (usually right next to the serial number) describing this specific product or service exactly as written. Do not summarize. If a letter is in uppercase, keep it uppercase. If a letter is in lowercase, keep it lowercase. Do not include hardware serial numbers such as 'BBR01913354100310'",
         default_factory=list,
     )
     hardwareSerialNumbers: List[str] = Field(
-        description="Extract EVERY SINGLE hardware serial number (S/n) associated with this line item. If multiple numbers are grouped with slashes (e.g., '123/45/67'), extract the whole string or split them. Extract all alphanumeric serial codes even if the 'S/n' prefix is omitted.",
+        description="Hardware serial numbers are long alphanumeric codes present below the description of the product or service. Extract EVERY SINGLE hardware serial number (Eg: 'AM150G6T', 'BBR01913354100310') associated with this line item. If two serial numbers are on the same line (Eg: 'AH0FBEPCPAB97E 5AH0FBEPCABA443'), extract both as separate serial numbers. Extract all alphanumeric serial codes even if the 'S/n' prefix is omitted. Return the serial numbers exactly as present. Do not hallucinate any serial numbers that are not present on the document.",
         default_factory=list,
     )
     modelNumber: Optional[str] = Field(
@@ -207,7 +207,7 @@ class InvoiceExtraction(BaseModel):
         description="The unique document identifier/invoice number. Usually under 'Invoice Number' or 'Invoice No.'."
     )
     invoiceDate: Optional[str] = Field(
-        description="The date the invoice was generated, explicitly formatted exactly as YYYY-MM-DD. Pay extreme attention to the year printed on the document. Do not assume the current year.",
+        description="The date the invoice was generated, explicitly formatted exactly as YYYY-MM-DD. Pay extreme attention to the year printed on the document. Usually under 'Invoice Date' or 'Dated'.",
         default=None,
     )
     irn: Optional[str] = Field(

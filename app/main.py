@@ -68,7 +68,7 @@ async def extract_invoice(file: UploadFile = File(...)):
         # Limit to 15 pages to prevent massive payloads crashing the API limit
         for page_num in range(min(doc.page_count, 15)):
             page = doc.load_page(page_num)
-            pix = page.get_pixmap(dpi=150)
+            pix = page.get_pixmap(dpi=300)      # High DPI for better OCR accuracy for serial numbers
             img_bytes = pix.tobytes("jpeg")
             base64_image = base64.b64encode(img_bytes).decode('utf-8')
             base64_images.append(base64_image)
