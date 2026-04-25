@@ -4,7 +4,7 @@ import time
 import base64
 
 import pytesseract
-from PIL import Image
+from PIL import Image, ImageEnhance
 import io
 
 import fitz
@@ -78,8 +78,16 @@ async def extract_invoice(file: UploadFile = File(...)):
             base64_image = base64.b64encode(img_bytes).decode('utf-8')
             base64_images.append(base64_image)
 
+            # Extract raw text from the image using pytesseract
             image = Image.open(io.BytesIO(img_bytes))
-            raw_pdf_text += pytesseract.image_to_string(image) + "\n\n"
+            # Convert to grayscale
+            gray_image = image.convert('L')
+            # Increase contrast to make text pop
+            enhancer = ImageEnhance.Contrast(gray_image)
+            high_contrast_image = enhancer.enhance(2.0)
+            # Apply a slight threshold (binarization)
+            bw_image = high_contrast_image.point(lambda x: 0 if x < 128 else 255, '1')
+            raw_pdf_text += pytesseract.image_to_string(bw_image) + "\n\n"
 
         doc.close()
 

@@ -207,7 +207,7 @@ class InvoiceExtraction(BaseModel):
         description="The unique document identifier/invoice number. Usually under 'Invoice Number' or 'Invoice No.'."
     )
     invoiceDate: Optional[str] = Field(
-        description="The date the invoice was generated, explicitly formatted exactly as YYYY-MM-DD. Pay extreme attention to the year printed on the document. Usually under 'Invoice Date' or 'Dated'.",
+        description="The date the invoice was generated, explicitly formatted exactly as YYYY-MM-DD. Usually under 'Invoice Date' or 'Dated'. Do not default to 23 or 24. Take this data from the raw text attached.",
         default=None,
     )
     irn: Optional[str] = Field(
