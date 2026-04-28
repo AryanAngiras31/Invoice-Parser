@@ -12,7 +12,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from app.schema import InvoiceExtraction
 
-# 1. Initialize Groq
+# initialize client
 client = instructor.from_openai(
     AsyncOpenAI(
         base_url="https://api.groq.com/openai/v1",
@@ -24,8 +24,7 @@ client = instructor.from_openai(
 app = FastAPI(title="Tax Invoice Parser API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-# 2. CORRECT INITIALIZATION FOR PaddleOCR 3.0
-# The 3.0 base class is extremely light. No charts, no formulas.
+# initialize PaddleOCR for CPU
 ocr_engine = PaddleOCR(device="cpu")
 
 @app.post("/api/v1/extract-invoice")
@@ -42,7 +41,7 @@ async def extract_invoice(file: UploadFile = File(...)):
             tmp.write(await file.read())
             tmp_file_path = tmp.name
 
-        # 3. CORRECT OCR METHOD CALL FOR 3.0
+        # OCR using PaddleOCR
         # In PaddleOCR 3.0, we use .predict() which returns a Result object
         result = ocr_engine.predict(input=tmp_file_path)
 
@@ -62,12 +61,22 @@ async def extract_invoice(file: UploadFile = File(...)):
 
         print(f"-----------------------\nRaw_pdf_text:\n {raw_pdf_text}\n-----------------------")
 
-        # 4. LLM EXTRACTION
+        system_prompt = """
+        You are an expert financial data extraction system tailored for Indian GST Tax Invoices.
+        Extract the requested fields using the provided raw text.
+        CRITICAL INSTRUCTIONS:
+        1. DO NOT perform any calculations. Extract numbers exactly as they appear.
+        2. Maintain table row integrity. Do not merge separate line items.
+        3. Pay extreme attention to dates, hardware serial numbers, and GSTINs.
+        4. If a field is not explicitly present, return null. Do not guess.
+        """
+
+        # LLM extraction to JSON
         candidate_data = await client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             response_model=InvoiceExtraction,
             messages=[
-                {"role": "system", "content": "Extract Indian GST invoice data. Pay close attention to serial numbers and GSTINs."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"RAW TEXT FROM OCR:\n{raw_pdf_text}"}
             ],
             temperature=0.0,
