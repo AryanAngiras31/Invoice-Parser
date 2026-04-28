@@ -75,25 +75,42 @@ async def extract_invoice(file: UploadFile = File(...)):
 
         candidate_data_dict = candidate_data.model_dump()
 
-        # Post-processing logic for slashed serial numbers
-        for item in candidate_data_dict.get("lineItems", []):
-            if item.get("description"):
-                item["description"] = "\n".join(item["description"])
+        # Update mandatory fields for Indian Invoices
+        mandatory_fields = [
+            "invoiceNumber",
+            "invoiceDate"
+        ]
 
-            if item.get("hardwareSerialNumbers"):
-                processed_sns = []
-                for sn in item["hardwareSerialNumbers"]:
-                    clean_sn = sn.replace("S/n:", "").replace("S/N:", "").strip()
-                    if "/" in clean_sn:
-                        split_parts = [part.strip() for part in clean_sn.split("/") if part.strip()]
-                        processed_sns.extend(split_parts)
-                    else:
-                        processed_sns.append(clean_sn)
-                item["hardwareSerialNumbers"] = processed_sns
+        missing_fields = []
+        for field in mandatory_fields:
+            if not candidate_data_dict.get(field):
+                missing_fields.append(field)
+
+        if not candidate_data_dict.get("supplierDetails", {}).get("gstin"):
+            missing_fields.append("supplierDetails.gstin")
+
+        tax_summary = candidate_data_dict.get("taxSummary", {})
+        if not tax_summary.get("totalTaxableValue"):
+            missing_fields.append("taxSummary.totalTaxableValue")
+
+        has_tax = (
+            tax_summary.get("totalCgstAmount") or
+            tax_summary.get("totalSgstAmount") or
+            tax_summary.get("totalIgstAmount")
+        )
+        if not has_tax:
+            missing_fields.append("taxSummary.MissingTaxBreakdown")
+
+        if not candidate_data_dict.get("taxSummary", {}).get("invoiceTotalAmount"):
+            missing_fields.append("taxSummary.invoiceTotalAmount")
+
+        processing_time = round((time.time() - start_time) * 1000)
 
         return {
             "status": "success",
-            "processing_time_ms": round((time.time() - start_time) * 1000),
+            "processing_time_ms": processing_time,
+            "missing_fields": missing_fields,
+            "num_missing_fields": len(missing_fields),
             "data": candidate_data_dict,
         }
 
