@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt \
 COPY ./app /app/app
 
 # Expose the API port
-EXPOSE 8080
+EXPOSE 8002
 
 # Start FastAPI
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop", "--http", "httptools"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002", "--loop", "uvloop", "--http", "httptools"]

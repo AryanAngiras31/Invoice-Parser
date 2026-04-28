@@ -59,7 +59,7 @@ If running locally without Docker, you must install system dependencies first:
 3. **Run the Server**:
    ```bash
    export GROQ_API_KEY="your_key_here"
-   uvicorn app.main:app --host 0.0.0.0 --port 8080
+   uvicorn app.main:app --host 0.0.0.0 --port 8002
    ```
 
 ## API Usage
@@ -74,7 +74,7 @@ If running locally without Docker, you must install system dependencies first:
 **Example with cURL**:
 ```bash
 curl -X 'POST' \
-  'http://localhost:8080/api/v1/extract-resume' \
+  'http://localhost:8002/api/v1/extract-resume' \
   -H 'accept: application/json' \
   -H 'Content-Type: multipart/form-data' \
   -F 'file=@my_resume.pdf'

@@ -17,5 +17,4 @@ numpy==1.24.4
 paddlepaddle==3.2.2
 
 # We must pin both OCR wrappers to the exact same 3.0.0 version
-paddlex[ocr]==3.0.0
 paddleocr==3.0.0
