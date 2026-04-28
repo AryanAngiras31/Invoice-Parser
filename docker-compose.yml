@@ -1,15 +1,17 @@
 version: "3.8"
 services:
-  resume-api:
+  invoice-api:
     build: .
     ports:
       - "8080:8080"
     environment:
       - GROQ_API_KEY=${GROQ_API_KEY}
+      # For paddle bug fixes
+      - FLAGS_enable_pir_api=0
+      - FLAGS_use_mkldnn=0
     volumes:
-      # This volume maps the HuggingFace cache so Marker doesn't re-download
-      # its 2GB of OCR models every time you restart the container
-      - huggingface_cache:/root/.cache/huggingface
+      - .:/app
+      - paddle_model_cache:/root/.paddlex/official_models
 
 volumes:
-  huggingface_cache:
+  paddle_model_cache:

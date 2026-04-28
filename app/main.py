@@ -1,21 +1,19 @@
 import os
 import tempfile
 import time
-import base64
 
-import pytesseract
-from PIL import Image, ImageEnhance
-import io
-
-import fitz
+from paddleocr import PPStructureV3
 import instructor
 from openai import AsyncOpenAI
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+os.environ["FLAGS_enable_pir_api"] = "0"
+os.environ["FLAGS_use_mkldnn"] = "0"
+
 from app.schema import InvoiceExtraction
 
-# 1. Initialize the Groq client using Instructor
+# 1. Initialize the Groq client using Instructor (Pointing back to Llama 3.3 70B!)
 client = instructor.from_openai(
     AsyncOpenAI(
         base_url="https://api.groq.com/openai/v1",
@@ -28,12 +26,23 @@ app = FastAPI(title="Tax Invoice Parser API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # replace "*" with the frontend URL
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# 2. Initialize PPStructureV3 Globally
+# It handles PDFs, Layout Analysis, Table Recognition, and Markdown generation natively
+ocr_engine = PPStructureV3(
+    text_recognition_model_name="en_PP-OCRv4_mobile_rec",
+    use_doc_orientation_classify=True,
+    use_doc_unwarping=False,
+    use_chart_recognition=False,
+    use_formula_recognition=False,
+    use_seal_recognition=False,
+    device="cpu"
+)
 
 @app.post("/api/v1/extract-invoice")
 async def extract_invoice(file: UploadFile = File(...)):
@@ -46,10 +55,10 @@ async def extract_invoice(file: UploadFile = File(...)):
         )
 
     # 5MB File Size Limit
-    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
-    file.file.seek(0, 2)  # Move cursor to end of file
-    file_size = file.file.tell()  # Get current position (size)
-    file.file.seek(0)  # Reset cursor back to the beginning
+    MAX_FILE_SIZE = 5 * 1024 * 1024
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
 
     if file_size > MAX_FILE_SIZE:
         raise HTTPException(
@@ -65,74 +74,60 @@ async def extract_invoice(file: UploadFile = File(...)):
             tmp.write(await file.read())
             tmp_file_path = tmp.name
 
-        # Convert ALL pages of the PDF into Base64 Images
-        doc = fitz.open(tmp_file_path)
-        base64_images = []
-        raw_pdf_text = ""
+        # 3. Natively parse the PDF using PPStructureV3
+        # No image conversion needed. Paddle handles the PDF slice internally.
+        output = ocr_engine.predict(input=tmp_file_path)
 
-        # Limit to 15 pages to prevent massive payloads crashing the API limit
-        for page_num in range(min(doc.page_count, 15)):
-            page = doc.load_page(page_num)
-            pix = page.get_pixmap(dpi=300)      # High DPI for better OCR accuracy for serial numbers
-            img_bytes = pix.tobytes("jpeg")
-            base64_image = base64.b64encode(img_bytes).decode('utf-8')
-            base64_images.append(base64_image)
+        markdown_list = []
+        for res in output:
+            md_info = res.markdown
+            if md_info:
+                markdown_list.append(md_info)
 
-            # Extract raw text from the image using pytesseract
-            image = Image.open(io.BytesIO(img_bytes))
-            # Convert to grayscale
-            gray_image = image.convert('L')
-            # Increase contrast to make text pop
-            enhancer = ImageEnhance.Contrast(gray_image)
-            high_contrast_image = enhancer.enhance(2.0)
-            # Apply a slight threshold (binarization)
-            bw_image = high_contrast_image.point(lambda x: 0 if x < 128 else 255, '1')
-            raw_pdf_text += pytesseract.image_to_string(bw_image) + "\n\n"
+        # Concatenate all pages into a perfectly structured Markdown string
+        raw_pdf_text = ocr_engine.concatenate_markdown_pages(markdown_list)
 
-        doc.close()
+        print(f"-----------------------\nRaw_pdf_text:\n {raw_pdf_text}\n-----------------------")
 
         system_prompt = """
         You are an expert financial data extraction system tailored for Indian GST Tax Invoices.
-        Extract the requested fields using BOTH the provided images and the raw text.
+        Extract the requested fields using the provided perfectly formatted Markdown text.
         CRITICAL INSTRUCTIONS:
-        1. DO NOT perform any calculations. Extract numbers exactly as they appear on the document.
+        1. DO NOT perform any calculations. Extract numbers exactly as they appear.
         2. Maintain table row integrity. Do not merge separate line items.
-        3. 3. Use the raw text provided to ensure 100% accuracy of dates, hardware serial numbers, and GSTINs. Do not guess or hallucinate characters.
-        4. If a field is not explicitly present, return null. Do not guess or infer HSN codes, GSTINs, or tax rates.
+        3. Pay extreme attention to dates, hardware serial numbers, and GSTINs.
+        4. If a field is not explicitly present, return null. Do not guess.
         """
 
-        print(f"raw_pdf_text: {raw_pdf_text}")
-
-        # 3. Dynamically build the multi-image payload
-        user_content = [
-            {
-                "type": "text",
-                "text": "Extract the data from this invoice. Use the raw text below to verify exact serial numbers and dates, and use the images to understand the table layout.\n\nRAW TEXT:\n" + raw_pdf_text
-            }
-        ]
-
-        for b64_img in base64_images:
-            user_content.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{b64_img}"
-                }
-            })
-
-        # Call Vision Model Llama 4 Scout
+        # 4. Call Text-Only Llama 3.3 70B
+        # Because the Markdown is so well-structured, 70B will flawlessly map it to JSON.
         candidate_data = await client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model="llama-3.3-70b-versatile",
             response_model=InvoiceExtraction,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
+                {"role": "user", "content": f"Extract the data from this invoice:\n\nRAW TEXT:\n{raw_pdf_text}"}
             ],
             temperature=0.0,
         )
 
         candidate_data_dict = candidate_data.model_dump()
 
-        # Post processing logic
+        # --- Post processing logic for slashed serial numbers ---
+        for item in candidate_data_dict.get("lineItems", []):
+            if item.get("description"):
+                item["description"] = "\n".join(item["description"])
+
+            if item.get("hardwareSerialNumbers"):
+                processed_sns = []
+                for sn in item["hardwareSerialNumbers"]:
+                    clean_sn = sn.replace("S/n:", "").replace("S/N:", "").strip()
+                    if "/" in clean_sn:
+                        split_parts = [part.strip() for part in clean_sn.split("/") if part.strip()]
+                        processed_sns.extend(split_parts)
+                    else:
+                        processed_sns.append(clean_sn)
+                item["hardwareSerialNumbers"] = processed_sns
 
         # Update mandatory fields for Indian Invoices
         mandatory_fields = [
@@ -141,21 +136,17 @@ async def extract_invoice(file: UploadFile = File(...)):
         ]
 
         missing_fields = []
-        # Check top level fields
         for field in mandatory_fields:
             if not candidate_data_dict.get(field):
                 missing_fields.append(field)
 
-        # Check nested supplier GSTIN
         if not candidate_data_dict.get("supplierDetails", {}).get("gstin"):
             missing_fields.append("supplierDetails.gstin")
 
-        # Financial Validation
         tax_summary = candidate_data_dict.get("taxSummary", {})
         if not tax_summary.get("totalTaxableValue"):
             missing_fields.append("taxSummary.totalTaxableValue")
 
-        # Check if at least one tax type was charged (or if it's an IGST vs CGST/SGST split)
         has_tax = (
             tax_summary.get("totalCgstAmount") or
             tax_summary.get("totalSgstAmount") or
@@ -164,7 +155,6 @@ async def extract_invoice(file: UploadFile = File(...)):
         if not has_tax:
             missing_fields.append("taxSummary.MissingTaxBreakdown")
 
-        # Check if invoice total amount is present
         if not candidate_data_dict.get("taxSummary", {}).get("invoiceTotalAmount"):
             missing_fields.append("taxSummary.invoiceTotalAmount")
 

@@ -5,12 +5,11 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies required by Marker OCR (OpenCV, Tesseract, etc.)
+# Install system dependencies required by PaddleOCR
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
-    tesseract-ocr \
-    ghostscript \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
