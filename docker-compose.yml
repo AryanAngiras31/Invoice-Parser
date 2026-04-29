@@ -15,7 +15,7 @@ services:
           memory: 4G  
     volumes:
       - paddle_model_cache:/home/appuser/.paddlex/official_models
-      - ./logs:/app/logs 
+      - invoice_logs:/app/logs 
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8002/health\")' || exit 1"]
       interval: 30s
@@ -23,7 +23,8 @@ services:
       retries: 3
       start_period: 60s 
     command: >
-      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8002 --loop uvloop --http httptools --log-level info 2>&1 | tee -a /app/logs/uvicorn.log"
+      sh -c "python -u -m uvicorn app.main:app --host 0.0.0.0 --port 8002 --loop uvloop --http httptools --log-level info 2>&1 | tee -a /app/logs/uvicorn.log"
 
 volumes:
   paddle_model_cache:
+  invoice_logs:
