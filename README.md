@@ -10,7 +10,11 @@ An intelligent, production-ready Tax Invoice Parsing API built with **FastAPI**.
 - **LLM-Powered Structuring**: Uses the `instructor` library with `Llama-3.3-70b` (via Groq) to accurately map invoice content to a strict Pydantic schema.
 - **Domain Specific**: Fine-tuned prompts for Indian GST Tax Invoices (e.g., extracting GSTIN, HSN/SAC codes, CGST/SGST/IGST breakdowns).
 - **Comprehensive Data Extraction**: Captures supplier details, buyer details, line items, tax summaries, bank details, and delivery information.
-- **Dockerized**: Includes all necessary system dependencies for easy deployment.
+- **Production-Ready Docker Setup**:
+    - Runs as non-root user for security.
+    - Healthcheck endpoint for container orchestration.
+    - Automatic restart policy and memory limits.
+    - Persistent log storage via Docker volumes.
 
 
 ## Prerequisites
@@ -172,6 +176,29 @@ curl -X 'POST' \
 }
 ```
 
+### Health Check
+
+**Endpoint**: `GET /health`
+
+**Description**: Simple health check endpoint for container orchestration (Docker/Kubernetes).
+
+**Example with cURL**:
+```bash
+curl -X 'GET' \
+  'http://localhost:8002/health' \
+  -H 'accept: application/json'
+```
+
+**Response**:
+```json
+{
+  "status": "healthy"
+}
+```
+
 ## Architecture Note
 
-The API initializes the **PaddleOCR** engine at startup, loading the OCR models into memory once. This ensures that the heavy weights for text detection and recognition are only loaded once, reducing request latency significantly after the initial boot.
+- **PaddleOCR Initialization**: The OCR engine is loaded at startup, ensuring heavy models are only loaded once, reducing request latency after the initial boot.
+- **Security**: The Docker container runs as a non-root user (`appuser`) for improved security.
+- **Persistent Storage**: PaddleOCR models are cached in a Docker volume to avoid re-downloading on restart. Application logs are written to `/app/logs/` and persisted via the `invoice_logs` volume.
+- **Health Monitoring**: Docker healthchecks use the `/health` endpoint to monitor container health with a 60-second startup grace period for model loading.
