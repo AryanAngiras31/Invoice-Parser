@@ -59,8 +59,6 @@ async def extract_invoice(file: UploadFile = File(...)):
             else:
                 print("Warning: Could not find 'rec_texts' in this page's output.")
 
-        print(f"-----------------------\nRaw_pdf_text:\n {raw_pdf_text}\n-----------------------")
-
         system_prompt = """
         You are an expert financial data extraction system tailored for Indian GST Tax Invoices.
         Extract the requested fields using the provided raw text.
