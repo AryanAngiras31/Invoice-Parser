@@ -25,8 +25,19 @@ app = FastAPI(title="Tax Invoice Parser API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # initialize PaddleOCR for CPU
-ocr_engine = PaddleOCR(device="cpu")
+ocr_engine = PaddleOCR(
+    device="cpu",
+    use_doc_orientation_classify=False,
+    use_doc_unwarping=False,
+    use_textline_orientation=False,
+)
 
+# Healthcheck endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+# Extract invoice endpoint
 @app.post("/api/v1/extract-invoice")
 async def extract_invoice(file: UploadFile = File(...)):
     if not file.filename.lower().endswith(".pdf"):

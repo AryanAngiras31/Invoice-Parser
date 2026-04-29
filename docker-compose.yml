@@ -12,6 +12,12 @@ services:
     volumes:
       - .:/app
       - paddle_model_cache:/root/.paddlex/official_models
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8002/health\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
   paddle_model_cache:
